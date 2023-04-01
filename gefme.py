@@ -201,10 +201,9 @@ def read64bit(filename):
 def write64bit(filename, data, filesize):
   with open(filename, 'wb') as f:
     for i in data:
-      numbytes = min(8, filesize)
+      numbytes = min(8, filesize) if filesize >= 0 else 8
       m = 2**(numbytes*8) - 1
       i = i & m
-      print(f'numbytes={numbytes}, i={i}, m={m}')
       f.write((i).to_bytes(numbytes, byteorder='little', signed=False))
       filesize -= 8
   return
@@ -218,14 +217,16 @@ def main(filelist):
       print(f'error: {filename}')
     elif filename.endswith('.gef'):
       ofilename = re.sub('.gef$', '', filename)
-      print(f'decode: {filename} -> {ofilename}')
       dmsg = decmsg(data, k)
+      filesize = dmsg.pop(0)
+      print(f'decode: {filename} -> {ofilename}. filesize = {filesize}')
       write64bit(ofilename, dmsg, filesize)
     else:
       ofilename = filename+'.gef'
-      print(f'encode: {filename} -> {ofilename}')
+      print(f'encode: {filename} -> {ofilename}. filesize = {filesize}')
+      data.insert(0, filesize)
       emsg, kmsg = encmsg(data, k)
-      write64bit(ofilename, emsg, filesize)
+      write64bit(ofilename, emsg, len(emsg)*8)
   return
 
 
