@@ -79,60 +79,65 @@ def rev(i, n, isize=64):
 
 def prime(i):
       #0  1  2  3   4   5   6   7   8   9  10  11  12  13  14  15  16    17  18  19  20  21  22  23  24   25
-  p = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59,   61, 67, 71, 73, 79, 83, 89, 97, 101, 
-       103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 
-       223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337, 
-       347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461, 
-       463, 467, 479, 487, 491, 499, 503, 509, 521]
+  p = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59,   61, 67, 71, 73, 79, 83, 89, 97, 101,
+       103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211,
+       223, 227, 229, 233, 239, 241, 251, 257, 263, 269, 271, 277, 281, 283, 293, 307, 311, 313, 317, 331, 337,
+       347, 349, 353, 359, 367, 373, 379, 383, 389, 397, 401, 409, 419, 421, 431, 433, 439, 443, 449, 457, 461,
+       463, 467, 479, 487, 491, 499, 503, 509, 521, 523, 541]
   return p[i]
 
 
 def getcmd(k, i):
-  cmd = getnibble(k, i) + 1
+  ptr = getnibble(k, i)
+  cmd = getnibble(k, ptr) + 1
   rot_cmd = prime(cmd)
+  add_cmd = (cmd & 0x7) + 1
   inv_cmd = getbit(k, cmd*3%isize)
   rev_cmd = getbit(k, cmd*7%isize)
-  return rot_cmd, inv_cmd, rev_cmd
+  return rot_cmd, inv_cmd, rev_cmd, add_cmd
+
+
+def add(val, n, wid = 4, isize=64):
+  m = 2**wid - 1
+  for i in range(0, isize, wid):
+    v = getbits(val, i+wid-1, i) + n
+    v = (v & m) << i
+    mshifted = invert(m << i, isize)
+    val = (val & mshifted) | v
+  return val
 
 
 def jumble(v, k, n=2, isize=64, id='x'):
   for i in range(n):
-    rot_cmd, inv_cmd, rev_cmd = getcmd(k, i)
+    rot_cmd, inv_cmd, rev_cmd, add_cmd = getcmd(k, i)
+    v = add(v, add_cmd, 4, isize)
     v = rotl(v, rot_cmd, isize)
     v = invert(v, isize) if inv_cmd==0 else v
-    v = rev(v, isize) if rev_cmd==0 else v
+#     v = rev(v, isize)
     v = v ^ k
   return v
 
 
 def unjumble(v, k, n=2, isize=64, id='x'):
   for i in range(n-1, -1, -1):
-    rot_cmd, inv_cmd, rev_cmd = getcmd(k, i)
+    rot_cmd, inv_cmd, rev_cmd, add_cmd = getcmd(k, i)
     v = v ^ k
-    v = rev(v, isize) if rev_cmd==0 else v
+#     v = rev(v, isize)
     v = invert(v, isize) if inv_cmd==0 else v
     v = rotr(v, rot_cmd, isize)
+    v = add(v, -add_cmd, 4, isize)
   return v
 
 
 def enc(v, k, n=2, isize=64):
-  k1 = jumble(k, k, n, isize, 'k')
-  if k1 == k:
-    k1 = rotl(k1, 61, isize)
-    k1 = rev(k1, isize)
-    k1 = invert(k1, isize)
+  k1 = jumble(k, 0, n, isize, 'k')
   k = k1
   e = jumble(plain, k, n, isize, 'p')
   return e, k
 
 
 def dec(e, k, n=2, isize=64):
-  k1 = jumble(k, k, n, isize, 'k')
-  if k1 == k:
-    print("BADKEY ")
-    k1 = rotl(k1, 61, isize)
-    k1 = rev(k1, isize)
-    k1 = invert(k1, isize)
+  k1 = jumble(k, 0, n, isize, 'k')
   k = k1
   p = unjumble(e, k, n, isize, 'p')
   return p, k
@@ -143,11 +148,11 @@ def dec(e, k, n=2, isize=64):
 isize = 64
 imax = 2**64-1
 k1 = 0x380ec3dc4fe9e477 # random.randint(0,imax)
-msglen = 500
+msglen = 100
 #msg = [random.randint(0,imax) for i in range(msglen)]
 pmsg = [i for i in range(msglen)]
 pmsg = [0 for i in range(msglen)]
-n = 2
+n = 1
 
 emsg = []
 kmsg = []
