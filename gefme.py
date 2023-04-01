@@ -3,10 +3,11 @@
 # python3 shmoo.py
 
 import math
+import os
 import random
+import re
 import sys
 import secrets
-
 
 def lsb(i, n):
   mask = 2**n - 1
@@ -87,7 +88,7 @@ def prime(i):
   return p[i]
 
 
-def getcmd(k, i):
+def getcmd(k, i, isize=64):
   ptr = getnibble(k, i)
   cmd = getnibble(k, ptr) + 1
   rot_cmd = prime(cmd)
@@ -109,7 +110,7 @@ def add(val, n, wid = 4, isize=64):
 
 def jumble(v, k, n=2, isize=64, id='x'):
   for i in range(n):
-    rot_cmd, inv_cmd, rev_cmd, add_cmd = getcmd(k, i)
+    rot_cmd, inv_cmd, rev_cmd, add_cmd = getcmd(k, i, isize)
     v = add(v, add_cmd, 4, isize)
     v = rotl(v, rot_cmd, isize)
     v = invert(v, isize) if inv_cmd==0 else v
@@ -120,7 +121,7 @@ def jumble(v, k, n=2, isize=64, id='x'):
 
 def unjumble(v, k, n=2, isize=64, id='x'):
   for i in range(n-1, -1, -1):
-    rot_cmd, inv_cmd, rev_cmd, add_cmd = getcmd(k, i)
+    rot_cmd, inv_cmd, rev_cmd, add_cmd = getcmd(k, i, isize)
     v = v ^ k
 #     v = rev(v, isize)
     v = invert(v, isize) if inv_cmd==0 else v
@@ -129,49 +130,109 @@ def unjumble(v, k, n=2, isize=64, id='x'):
   return v
 
 
-def enc(v, k, n=2, isize=64):
+def encword(plain, k, n=2, isize=64):
   k1 = jumble(k, 0, n, isize, 'k')
   k = k1
   e = jumble(plain, k, n, isize, 'p')
   return e, k
 
+def encmsg(pmsg, k , n=1, isize=64):
+  emsg = []
+  kmsg = []
+  for plain in pmsg:
+    e, k = encword(plain, k, n, isize)
+    emsg.append(e)
+    kmsg.append(k)
+  return emsg, kmsg
 
-def dec(e, k, n=2, isize=64):
+
+def decword(e, k, n=2, isize=64):
   k1 = jumble(k, 0, n, isize, 'k')
   k = k1
-  p = unjumble(e, k, n, isize, 'p')
-  return p, k
+  plain = unjumble(e, k, n, isize, 'p')
+  return plain, k
+
+
+def decmsg(emsg, k, n=1, isize=64):
+  dmsg = []
+  for e in emsg:
+    p, k = decword(e, k, n, isize)
+    dmsg.append(p)
+  return dmsg
+
+
+def test():
+  isize = 64
+  imax = 2**64-1
+  k1 = 0x380ec3dc4fe9e477 # random.randint(0,imax)
+  msglen = 100
+  #msg = [random.randint(0,imax) for i in range(msglen)]
+  pmsg = [i for i in range(msglen)]
+  pmsg = [0 for i in range(msglen)]
+  n = 1
+
+  emsg, kmsg = encmsg(pmsg, k1, n, isize)
+  dmsg = decmsg(emsg, k1, n, isize)
+
+  print(f'k1=0x{k1:016x}')
+  for i, p in enumerate(pmsg):
+    d = dmsg[i]
+    e = emsg[i]
+    k = kmsg[i]
+    print(f'p={p:016x} k={k:016x} e={e:016x} d={d:016x}')
+  return
+
+
+def read64bit(filename):
+  data = []
+  filesize = os.path.getsize(filename)
+  try:
+    with open(filename, 'rb') as f:
+      b8 = f.read(8)
+      while b8:
+        i = int.from_bytes(b8, byteorder='little')
+        data.append(i)
+        b8 = f.read(8)
+  except FileNotFoundError:
+    return []
+  return data, filesize
+
+
+def write64bit(filename, data, filesize):
+  with open(filename, 'wb') as f:
+    for i in data:
+      numbytes = min(8, filesize)
+      m = 2**(numbytes*8) - 1
+      i = i & m
+      print(f'numbytes={numbytes}, i={i}, m={m}')
+      f.write((i).to_bytes(numbytes, byteorder='little', signed=False))
+      filesize -= 8
+  return
+
+
+def main(filelist):
+  k = 0x380ec3dc4fe9e477 # random.randint(0,imax)
+  for filename in filelist:
+    data, filesize = read64bit(filename)
+    if len(data) == 0:
+      print(f'error: {filename}')
+    elif filename.endswith('.gef'):
+      ofilename = re.sub('.gef$', '', filename)
+      print(f'decode: {filename} -> {ofilename}')
+      dmsg = decmsg(data, k)
+      write64bit(ofilename, dmsg, filesize)
+    else:
+      ofilename = filename+'.gef'
+      print(f'encode: {filename} -> {ofilename}')
+      emsg, kmsg = encmsg(data, k)
+      write64bit(ofilename, emsg, filesize)
+  return
+
+
 
 ## --------------------------------------------------
 ## --------------------------------------------------
 
-isize = 64
-imax = 2**64-1
-k1 = 0x380ec3dc4fe9e477 # random.randint(0,imax)
-msglen = 100
-#msg = [random.randint(0,imax) for i in range(msglen)]
-pmsg = [i for i in range(msglen)]
-pmsg = [0 for i in range(msglen)]
-n = 1
+# test()
 
-emsg = []
-kmsg = []
-k = k1
-for plain in pmsg:
-  e, k = enc(plain, k, n, isize)
-  emsg.append(e)
-  kmsg.append(k)
-
-dmsg = []
-k = k1
-for e in emsg:
-  p, k = dec(e, k, n, isize)
-  dmsg.append(p)
-
-print(f'k1=0x{k1:016x}')
-for i, p in enumerate(pmsg):
-  d = dmsg[i]
-  e = emsg[i]
-  k = kmsg[i]
-  print(f'p={p:016x} k={k:016x} e={e:016x} d={d:016x}')
-
+main(sys.argv[1:])
