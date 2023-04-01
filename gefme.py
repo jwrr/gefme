@@ -221,12 +221,14 @@ def main(filelist):
       filesize = dmsg.pop(0)
       print(f'decode: {filename} -> {ofilename}. filesize = {filesize}')
       write64bit(ofilename, dmsg, filesize)
+      os.remove(filename)
     else:
       ofilename = filename+'.gef'
       print(f'encode: {filename} -> {ofilename}. filesize = {filesize}')
       data.insert(0, filesize)
       emsg, kmsg = encmsg(data, k)
       write64bit(ofilename, emsg, len(emsg)*8)
+      os.remove(filename)
   return
 
 
